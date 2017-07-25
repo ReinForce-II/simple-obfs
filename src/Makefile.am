@@ -16,6 +16,7 @@ endif
 
 obfs_src = obfs_http.c \
 		   obfs_tls.c \
+		   obfs_random.c \
 		   options.c \
 		   base64.c
 

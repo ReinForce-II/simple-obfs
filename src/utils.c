@@ -269,7 +269,7 @@ usage()
         "       -r <addr>:<port>           Forward traffic to this remote server address.\n");
 #endif
     printf(
-        "       --obfs <http|tls>          Enable obfuscating: HTTP or TLS (Experimental).\n");
+        "       --obfs <http|tls|random>          Enable obfuscating: HTTP or TLS or Random Padding (Experimental).\n");
 #ifndef MODULE_REMOTE
     printf(
         "       --obfs-host <host_name>    Hostname for obfuscating (Experimental).\n");

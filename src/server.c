@@ -62,6 +62,7 @@
 #include "utils.h"
 #include "obfs_http.h"
 #include "obfs_tls.h"
+#include "obfs_random.h"
 #include "options.h"
 #include "server.h"
 
@@ -1234,6 +1235,8 @@ main(int argc, char **argv)
                         obfs_para = obfs_http;
                     else if (strcmp(value, obfs_tls->name) == 0)
                         obfs_para = obfs_tls;
+                    else if (strcmp(value, obfs_random->name) == 0)
+                        obfs_para = obfs_random;
                 } else if (strcmp(key, "obfs-host") == 0) {
                     obfs_host = value;
                 } else if (strcmp(key, "failover") == 0) {
@@ -1282,6 +1285,8 @@ main(int argc, char **argv)
                     obfs_para = obfs_http;
                 else if (strcmp(optarg, obfs_tls->name) == 0)
                     obfs_para = obfs_tls;
+                else if (strcmp(optarg, obfs_random->name) == 0)
+                    obfs_para = obfs_random;
             } else if (option_index == 3) {
                 obfs_host = optarg;
             } else if (option_index == 4) {
@@ -1383,6 +1388,8 @@ main(int argc, char **argv)
                 obfs_para = obfs_http;
             else if (strcmp(conf->obfs, obfs_tls->name) == 0)
                 obfs_para = obfs_tls;
+            else if (strcmp(conf->obfs, obfs_random->name) == 0)
+                obfs_para = obfs_random;
         }
         if (obfs_host == NULL) {
             obfs_host = conf->obfs_host;
