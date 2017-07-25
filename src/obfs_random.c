@@ -31,7 +31,7 @@
 #include "utils.h"
 #include "obfs_random.h"
 
-static int obfs_random(buffer_t *, size_t, obfs_t *);
+static int obfs_random_header(buffer_t *, size_t, obfs_t *);
 static int deobfs_random_header(buffer_t *, size_t, obfs_t *);
 static int check_random_header(buffer_t *buf);
 static void disable_random(obfs_t *obfs);
@@ -43,8 +43,8 @@ static obfs_para_t obfs_random_st = {
     .port            = 0,
     .send_empty_response_upon_connection = true,
 
-    .obfs_request    = &obfs_random,
-    .obfs_response   = &obfs_random,
+    .obfs_request    = &obfs_random_header,
+    .obfs_response   = &obfs_random_header,
     .deobfs_request  = &deobfs_random_header,
     .deobfs_response = &deobfs_random_header,
     .check_obfs      = &check_random_header,
@@ -55,7 +55,7 @@ static obfs_para_t obfs_random_st = {
 obfs_para_t *obfs_random = &obfs_random_st;
 
 static int
-obfs_random(buffer_t *buf, size_t cap, obfs_t *obfs)
+obfs_random_header(buffer_t *buf, size_t cap, obfs_t *obfs)
 {
     if (obfs == NULL || obfs->obfs_stage != 0) return 0;
     
@@ -87,7 +87,7 @@ deobfs_random_header(buffer_t *buf, size_t cap, obfs_t *obfs)
     char *data = buf->data;
     int len    = buf->len;
     
-    uint8_t padding_len = (uint8_t*)data;
+    uint8_t padding_len = *(uint8_t*)data;
     len -= (1 + padding_len);
     data += (1 + padding_len);
     memmove(buf->data, data, len);
