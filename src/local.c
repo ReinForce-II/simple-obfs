@@ -83,6 +83,10 @@
 #define BUF_SIZE 2048
 #endif
 
+#ifndef BUF_SAFE
+#define BUF_SAFE 128
+#endif
+
 int verbose        = 0;
 int keep_resolving = 1;
 
@@ -264,8 +268,7 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
         buf = remote->buf;
     }
 
-    r = recv(server->fd, buf->data + buf->len, BUF_SIZE - buf->len, 0);
-
+    r = recv(server->fd, buf->data + buf->len, BUF_SIZE - buf->len - BUF_SAFE, 0);
     if (r == 0) {
         // connection closed
         close_and_free_remote(EV_A_ remote);
@@ -520,8 +523,12 @@ remote_recv_cb(EV_P_ ev_io *w, int revents)
     server_t *server              = remote->server;
 
     ev_timer_again(EV_A_ & remote->recv_ctx->watcher);
-
-    ssize_t r = recv(remote->fd, server->buf->data, BUF_SIZE, 0);
+    
+    ssize_t r;
+    if (server->obfs->buf != NULL && server->obfs->buf->len < BUF_SIZE)
+		r = recv(remote->fd, server->buf->data, BUF_SIZE - server->obfs->buf->len, 0);
+	else
+		r = recv(remote->fd, server->buf->data, BUF_SIZE, 0);		
 
     if (r == 0) {
         // connection closed
@@ -530,9 +537,14 @@ remote_recv_cb(EV_P_ ev_io *w, int revents)
         return;
     } else if (r == -1) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            // no data
-            // continue to wait for recv
-            return;
+            if (server->obfs->buf->len > 0) {
+				r = 0;
+			}
+			else {
+				// no data
+				// continue to wait for recv
+				return;
+            }
         } else {
             ERROR("remote_recv_cb_recv");
             close_and_free_remote(EV_A_ remote);
@@ -548,7 +560,9 @@ remote_recv_cb(EV_P_ ev_io *w, int revents)
         rx += server->buf->len;
 #endif
         if (obfs_para) {
-            if (obfs_para->deobfs_response(server->buf, BUF_SIZE, server->obfs)) {
+			int rc = obfs_para->deobfs_response(server->buf, BUF_SIZE, server->obfs);
+			if (rc == OBFS_NEED_MORE) return;
+            else if (rc) {
                 LOGE("invalid obfuscating");
                 close_and_free_remote(EV_A_ remote);
                 close_and_free_server(EV_A_ server);
@@ -577,6 +591,9 @@ remote_recv_cb(EV_P_ ev_io *w, int revents)
         ev_io_stop(EV_A_ & remote_recv_ctx->io);
         ev_io_start(EV_A_ & server->send_ctx->io);
     }
+    if (server->obfs->buf->len > 0) {
+		ev_feed_event(EV_A_ & remote_recv_ctx->io, revents);
+	}
 
     // Disable TCP_NODELAY after the first response are sent
     if (!remote->recv_ctx->connected) {

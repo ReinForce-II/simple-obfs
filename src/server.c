@@ -78,6 +78,10 @@
 #define BUF_SIZE 2048
 #endif
 
+#ifndef BUF_SAFE
+#define BUF_SAFE 128
+#endif
+
 #ifndef SSMAXCONN
 #define SSMAXCONN 1024
 #endif
@@ -520,9 +524,12 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
         close_and_free_server(EV_A_ server);
         return;
     }
-
-    ssize_t r = recv(server->fd, buf->data + len, BUF_SIZE - len, 0);
-
+    ssize_t r;
+    if (server->obfs->buf != NULL && server->obfs->buf->len < BUF_SIZE - len)
+		r = recv(server->fd, buf->data + len, BUF_SIZE - len - server->obfs->buf->len, 0);
+	else
+		r = recv(server->fd, buf->data + len, BUF_SIZE - len, 0);
+		
     if (r == 0) {
         // connection closed
         if (verbose) {
@@ -533,9 +540,14 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
         return;
     } else if (r == -1) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            // no data
-            // continue to wait for recv
-            return;
+			if (server->obfs->buf->len > 0) {
+				r = 0;
+			}
+			else {
+				// no data
+				// continue to wait for recv
+				return;
+            }
         } else {
             ERROR("server recv");
             close_and_free_remote(EV_A_ remote);
@@ -636,6 +648,9 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
             remote->buf->idx  = s;
             ev_io_stop(EV_A_ & server_recv_ctx->io);
             ev_io_start(EV_A_ & remote->send_ctx->io);
+        }
+        if (server->obfs->buf->len > 0) {
+			ev_feed_event(EV_A_ & server_recv_ctx->io, revents);
         }
         return;
 
@@ -800,7 +815,7 @@ remote_recv_cb(EV_P_ ev_io *w, int revents)
 
     ev_timer_again(EV_A_ & server->recv_ctx->watcher);
 
-    ssize_t r = recv(remote->fd, server->buf->data, BUF_SIZE, 0);
+    ssize_t r = recv(remote->fd, server->buf->data, BUF_SIZE - BUF_SAFE, 0);
 
     if (r == 0) {
         // connection closed

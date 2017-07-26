@@ -58,24 +58,21 @@ static int
 obfs_random_header(buffer_t *buf, size_t cap, obfs_t *obfs)
 {
     if (obfs == NULL || obfs->obfs_stage != 0) return 0;
-    
-	uint8_t padding_len;
-	rand_bytes(&padding_len, 1);
-	padding_len <<= 3;
+	uint8_t padding_len = rand() % 16;
 	uint8_t *padding_body = (uint8_t*)malloc(padding_len);
 	rand_bytes(padding_body, padding_len);
 
     size_t obfs_len = 1 + padding_len;
-    size_t buf_len = buf->len;
+    uint16_t buf_len = buf->len;
 
     brealloc(buf, obfs_len + buf_len, cap);
 
-    memmove(buf->data + obfs_len, buf->data, buf_len);
+    memmove(buf->data + obfs_len + 2, buf->data, buf_len);
+    memmove(buf->data + obfs_len, &buf_len, 2);
     memcpy(buf->data, &padding_len, 1);
     memcpy(buf->data + 1, &padding_body, padding_len);
 
-    buf->len = obfs_len + buf_len;
-
+    buf->len = obfs_len + 2 + buf_len;
     return buf->len;
 }
 
@@ -83,17 +80,49 @@ static int
 deobfs_random_header(buffer_t *buf, size_t cap, obfs_t *obfs)
 {
     if (obfs == NULL || obfs->deobfs_stage != 0) return 0;
-
-    char *data = buf->data;
-    int len    = buf->len;
+    if (obfs->buf == NULL) 
+    {
+		obfs->buf = ss_malloc(sizeof(buffer_t));
+		balloc(obfs->buf, cap * 2);
+		obfs->buf->len = 0;
+	}
+	
+	if (buf->len > 0) {
+		if (obfs->buf->capacity < obfs->buf->len + cap) {
+			brealloc(obfs->buf, obfs->buf->capacity * 2, obfs->buf->capacity * 2);
+			if (obfs->buf->data == NULL) {
+				LOGE("realloc to %ld failed", (long)obfs->buf->capacity);
+			}
+		}
+		memcpy(obfs->buf->data + obfs->buf->len, buf->data, buf->len);
+		obfs->buf->len += buf->len;
+		buf->len = 0;
+	}
+	
+    char *data = obfs->buf->data;
+    int len    = obfs->buf->len;
     
-    uint8_t padding_len = *(uint8_t*)data;
+    uint8_t padding_len = data[0];
     len -= (1 + padding_len);
-    data += (1 + padding_len);
-    memmove(buf->data, data, len);
-    buf->len = len;
-
-    return 0;
+    data += (1 + padding_len);    
+    
+    uint16_t pktlen;
+    memcpy(&pktlen, data, 2);
+    len -= 2;
+    data += 2;
+    
+    int remain_len = len - pktlen;
+    char *remain = data + pktlen;
+    if(remain_len < 0) {
+		return OBFS_NEED_MORE;
+    }
+    else {
+		memcpy(buf->data, data, pktlen);
+		buf->len = pktlen;
+		memmove(obfs->buf->data, remain, remain_len);
+		obfs->buf->len = remain_len;
+		return 0;
+    }
 }
 
 static int
@@ -107,6 +136,7 @@ disable_random(obfs_t *obfs)
 {
     obfs->obfs_stage = -1;
     obfs->deobfs_stage = -1;
+    LOGI("Random padding disabled.");
 }
 
 static int
